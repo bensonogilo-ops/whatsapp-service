@@ -105,6 +105,9 @@ export class MediaMessage {
             return null
         }
 
+        // Shows whether the bot is replying to an @lid or a phone-number id
+        console.log('[debug] #dvo target', targetJid, JSON.stringify(this.message.key))
+
         // Unwrap the view once container (if any) so we work on the plain media message
         const current: any = this.message?.message
         const wrapper = current?.viewOnceMessage || current?.viewOnceMessageV2 || current?.viewOnceMessageV2Extension
