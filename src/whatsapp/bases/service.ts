@@ -130,17 +130,29 @@ export abstract class WhatsappBaseService {
         })
     }
 
+    // Newer WhatsApp labels your own "Message yourself" chat with an "@lid" id.
+    // Map it back to your phone-number id so replies are delivered reliably.
+    private mapOwnChatJid(message: WhatsappMessage): WhatsappMessage {
+        const remoteJid = message?.key?.remoteJid
+        if (!message?.key?.fromMe || !remoteJid?.endsWith('@lid') || !this.contactConnected?.id) {
+            return message
+        }
+
+        // only remap your OWN chat; chats with other people keep their own id
+        const ownLid = (this.contactConnected as any)?.lid as string | undefined
+        const isOwnChat = ownLid ? jidDecode(ownLid)?.user === jidDecode(remoteJid)?.user : true
+        if (!isOwnChat) {
+            return message
+        }
+
+        return { ...message, key: { ...message.key, remoteJid: `${this.contactConnected.id}@s.whatsapp.net` } }
+    }
+
     async convertAndSendSticker(message: WhatsappMessage) {
         // NOTE: the original "skip messages in your own chat" check was removed
         // here so you can test the sticker bot from "Message yourself".
 
-        // Newer WhatsApp may label your own chat with an "@lid" id. Map it back to your number.
-        let target = message
-        if (message?.key?.fromMe && message?.key?.remoteJid?.endsWith('@lid') && this.contactConnected?.id) {
-            target = { ...message, key: { ...message.key, remoteJid: `${this.contactConnected.id}@s.whatsapp.net` } }
-        }
-
-        const media = new MediaMessage(target)
+        const media = new MediaMessage(this.mapOwnChatJid(message))
 
         const sticker = await media.extractStickerMedia(`${this.serviceName} X ${message.pushName}`, this.serviceName)
         if (!sticker) {
@@ -156,7 +168,7 @@ export abstract class WhatsappBaseService {
     }
 
     async downloadViewOnce(message: WhatsappMessage) {
-        const media = new MediaMessage(message)
+        const media = new MediaMessage(this.mapOwnChatJid(message))
 
         const viewOnce = await media.extractViewOnceMedia()
         if (!viewOnce) {
