@@ -4,6 +4,14 @@ import { errorHandler } from './util/handler'
 import { getGroupData, logout, printQR, status } from './whatsapp/controller'
 import whatsappRouter from './whatsapp/router'
 
+// Keep the service running if WhatsApp drops the connection mid-request
+process.on('unhandledRejection', reason => {
+    console.error('Unhandled rejection (ignored):', reason)
+})
+process.on('uncaughtException', error => {
+    console.error('Uncaught exception (ignored):', error)
+})
+
 const app = express()
 
 app.use(express.json())
