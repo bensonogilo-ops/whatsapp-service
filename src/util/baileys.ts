@@ -34,14 +34,17 @@ export function formatToJid(number: string) {
 }
 
 export function extractJidFromMessage(message: WhatsappMessage): string {
+    // Newer WhatsApp labels many one-to-one chats with an "@lid" id instead of a phone number id.
+    const isUserJid = (jid?: string | null) => !!jid && (jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid'))
+
     const extract = () => {
-        if (message?.quoted?.sendToJid?.endsWith('@s.whatsapp.net') || message?.quoted?.sendToJid?.endsWith('@g.us')) {
+        if (isUserJid(message?.quoted?.sendToJid) || message?.quoted?.sendToJid?.endsWith('@g.us')) {
             return message.quoted.sendToJid
         }
-        if (message?.key?.remoteJid?.endsWith('@s.whatsapp.net')) {
+        if (isUserJid(message?.key?.remoteJid)) {
             return message.key.remoteJid
         }
-        if (message?.key?.participant?.endsWith('@s.whatsapp.net') && message?.key?.remoteJid?.endsWith('@g.us')) {
+        if (isUserJid(message?.key?.participant) && message?.key?.remoteJid?.endsWith('@g.us')) {
             return message.key.remoteJid
         }
         return ''
