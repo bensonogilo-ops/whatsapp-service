@@ -17,25 +17,26 @@ export class MediaMessage {
         this.message = deepCopy(message)
     }
 
-    // returns the view-once wrapper (any of the 3 known versions) or undefined
-    private static getViewOnceWrapper(message: WhatsappMessage['message']) {
-        return message?.viewOnceMessage || message?.viewOnceMessageV2 || message?.viewOnceMessageV2Extension
-    }
-
     static getMessageMedia(message: WhatsappMessage['message']): ValueMessageMedia {
+        // Newer WhatsApp can send view once as a plain image/video with a viewOnce flag
         if (message?.imageMessage) {
-            return { media: message.imageMessage, type: 'image', viewOnce: false }
+            return { media: message.imageMessage, type: 'image', viewOnce: !!message.imageMessage.viewOnce }
         }
         if (message?.videoMessage) {
-            return { media: message.videoMessage, type: 'video', viewOnce: false }
+            return { media: message.videoMessage, type: 'video', viewOnce: !!message.videoMessage.viewOnce }
         }
 
-        const wrapper = MediaMessage.getViewOnceWrapper(message)
-        if (wrapper?.message?.imageMessage) {
-            return { media: wrapper.message.imageMessage, type: 'image', viewOnce: true }
+        // Older formats wrap the media inside a view once container
+        const wrapped: proto.IMessage | null | undefined =
+            message?.viewOnceMessageV2?.message ||
+            (message as any)?.viewOnceMessageV2Extension?.message ||
+            message?.viewOnceMessage?.message
+
+        if (wrapped?.imageMessage) {
+            return { media: wrapped.imageMessage, type: 'image', viewOnce: true }
         }
-        if (wrapper?.message?.videoMessage) {
-            return { media: wrapper.message.videoMessage, type: 'video', viewOnce: true }
+        if (wrapped?.videoMessage) {
+            return { media: wrapped.videoMessage, type: 'video', viewOnce: true }
         }
 
         return null
@@ -100,21 +101,21 @@ export class MediaMessage {
 
         const targetJid = extractJidFromMessage(this.message)
         if (!targetJid) {
+            console.log('[debug] #dvo received but no reply chat id could be worked out')
             return null
         }
 
-        const viewOnce = MediaMessage.getViewOnceWrapper(this.message?.message)
-        if (!viewOnce?.message) {
-            return null
-        }
+        const current: any = this.message?.message
+        const wrapper = current?.viewOnceMessage || current?.viewOnceMessageV2 || current?.viewOnceMessageV2Extension
+        const inner: any = wrapper?.message || current
 
-        for (const key in viewOnce.message) {
-            const data = (viewOnce.message as any)[key]
+        for (const key in inner) {
+            const data = inner[key]
             if (data?.viewOnce) {
                 data.viewOnce = false
             }
         }
-        this.message.message = viewOnce.message
+        this.message.message = inner
 
         // saveMessageMediaToPublic(this.message)
 
@@ -133,8 +134,8 @@ export class MediaMessage {
         const media = MediaMessage.getMessageMedia(quoMessage?.contextInfo?.quotedMessage)
         if (!media) return
 
-        const caption = (quoMessage.text || '').trim()
-        const destination = getCaptionAttribute(caption, 'destination') || ''
+        const caption = quoMessage.text.trim()
+        const destination = getCaptionAttribute(caption, 'destination')
 
         const quoted: WhatsappMessageQuoted = { message: caption }
         switch (destination.toLowerCase()) {
@@ -176,18 +177,24 @@ export class MediaMessage {
 
         const viewOnceMedia = MediaMessage.getMessageMedia(this.message.message)
 
+        const baseCaption = this.message?.quoted?.message || viewOnceMedia?.media?.caption
+        const caption = baseCaption?.trim?.()
+        if (!caption?.toLowerCase()?.startsWith('#dvo')) {
+            return false
+        }
+
+        console.log(
+            `[debug] #dvo received viewOnce=${!!viewOnceMedia?.viewOnce} type=${viewOnceMedia?.type ?? 'none'} keys=${Object.keys(this.message?.message || {}).join(',')}`,
+        )
+
         if (!viewOnceMedia?.viewOnce) {
             return false
         }
 
-        const baseCaption = this.message?.quoted?.message || viewOnceMedia?.media?.caption
-        const caption = baseCaption?.trim?.()?.toLowerCase()
-
-        // accept both spellings: #dvo and #dov
-        if (!caption?.startsWith('#dvo') && !caption?.startsWith('#dov')) {
-            return false
+        const passwordOk = this.checkPassword(caption)
+        if (!passwordOk) {
+            console.log('[debug] #dvo password mismatch')
         }
-
-        return this.checkPassword(baseCaption.trim())
+        return passwordOk
     }
 }
