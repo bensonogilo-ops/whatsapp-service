@@ -8,6 +8,14 @@ const app = express()
 
 app.use(express.json())
 
+app.use((req, res, next) => {
+    const apiKey = process.env.API_KEY
+    if (!apiKey || req.headers['x-api-key'] !== apiKey) {
+        return res.status(401).json({ message: 'unauthorized' })
+    }
+    return next()
+})
+
 app.get('/status', status)
 app.get('/qr-code', printQR)
 app.delete('/logout', logout)
