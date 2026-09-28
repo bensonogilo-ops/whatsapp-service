@@ -51,7 +51,7 @@
         "webpack-node-externals": "^3.0.0"
     },
     "dependencies": {
-        "@whiskeysockets/baileys": "^6.6.0",
+        "@whiskeysockets/baileys": "latest",
         "dotenv": "^16.4.5",
         "express": "^4.19.2",
         "ffmpeg-static": "^5.2.0",
