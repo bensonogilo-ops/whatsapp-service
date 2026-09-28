@@ -131,9 +131,8 @@ export abstract class WhatsappBaseService {
     }
 
     async convertAndSendSticker(message: WhatsappMessage) {
-        if (formatToJid(message?.key?.remoteJid) === formatToJid(this.contactConnected.id)) {
-            return false
-        }
+        // NOTE: the original "skip messages in your own chat" check was removed
+        // here so you can test the sticker bot from "Message yourself".
 
         const media = new MediaMessage(message)
 
