@@ -20,6 +20,9 @@
     "keywords": [],
     "author": "",
     "license": "ISC",
+    "engines": {
+        "node": ">=22"
+    },
     "devDependencies": {
         "@types/express": "^4.17.21",
         "@types/jest": "^30.0.0",
