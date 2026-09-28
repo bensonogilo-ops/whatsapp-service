@@ -11,6 +11,7 @@ import makeWASocket, {
     jidDecode,
     jidNormalizedUser,
     promiseTimeout,
+    proto,
 } from '@whiskeysockets/baileys'
 import { pino } from 'pino'
 import QRCodeTerminal from 'qrcode-terminal'
@@ -32,6 +33,8 @@ export abstract class WhatsappBaseService {
     protected contactConnected: Contact
     protected socket: WhatsappSocket
     protected qrcode: string
+    // recent outgoing messages, so WhatsApp can ask us to re-send one it could not decrypt
+    private sentMessages = new Map<string, proto.IMessage>()
 
     constructor(
         protected serviceName = 'Whatsapp Service',
@@ -237,6 +240,9 @@ export abstract class WhatsappBaseService {
                     await this.socket.sendPresenceUpdate('paused', jid)
                     await delay(1 * 1000)
                     const message = await this.socket.sendMessage(jid, content, options)
+                    if (message?.key?.id && message?.message) {
+                        this.rememberSentMessage(message.key.id, message.message)
+                    }
                     resolve(message)
                 } catch (error) {
                     reject(error)
@@ -250,6 +256,16 @@ export abstract class WhatsappBaseService {
             }
 
             throw error
+        }
+    }
+
+    private rememberSentMessage(id: string, content: proto.IMessage) {
+        this.sentMessages.set(id, content)
+        if (this.sentMessages.size > 500) {
+            const oldest = this.sentMessages.keys().next().value
+            if (oldest !== undefined) {
+                this.sentMessages.delete(oldest)
+            }
         }
     }
 
@@ -267,6 +283,7 @@ export abstract class WhatsappBaseService {
             qrTimeout: 1000 * 60 * 60 * 24,
             browser: [this.serviceName, 'Desktop', this.serviceVersion],
             markOnlineOnConnect: false,
+            getMessage: async key => this.sentMessages.get(key?.id ?? ''),
         })
 
         socket.ev.on('connection.update', update => this.onConnectionUpdate(socket, state, update))
