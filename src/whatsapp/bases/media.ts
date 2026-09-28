@@ -17,6 +17,11 @@ export class MediaMessage {
         this.message = deepCopy(message)
     }
 
+    // returns the view-once wrapper (any of the 3 known versions) or undefined
+    private static getViewOnceWrapper(message: WhatsappMessage['message']) {
+        return message?.viewOnceMessage || message?.viewOnceMessageV2 || message?.viewOnceMessageV2Extension
+    }
+
     static getMessageMedia(message: WhatsappMessage['message']): ValueMessageMedia {
         if (message?.imageMessage) {
             return { media: message.imageMessage, type: 'image', viewOnce: false }
@@ -25,18 +30,12 @@ export class MediaMessage {
             return { media: message.videoMessage, type: 'video', viewOnce: false }
         }
 
-        if (message?.viewOnceMessageV2?.message?.imageMessage) {
-            return { media: message?.viewOnceMessageV2?.message?.imageMessage, type: 'image', viewOnce: true }
+        const wrapper = MediaMessage.getViewOnceWrapper(message)
+        if (wrapper?.message?.imageMessage) {
+            return { media: wrapper.message.imageMessage, type: 'image', viewOnce: true }
         }
-        if (message?.viewOnceMessageV2?.message?.videoMessage) {
-            return { media: message?.viewOnceMessageV2?.message?.videoMessage, type: 'video', viewOnce: true }
-        }
-
-        if (message?.viewOnceMessage?.message?.imageMessage) {
-            return { media: message?.viewOnceMessage?.message?.imageMessage, type: 'image', viewOnce: true }
-        }
-        if (message?.viewOnceMessage?.message?.videoMessage) {
-            return { media: message?.viewOnceMessage?.message?.videoMessage, type: 'video', viewOnce: true }
+        if (wrapper?.message?.videoMessage) {
+            return { media: wrapper.message.videoMessage, type: 'video', viewOnce: true }
         }
 
         return null
@@ -104,10 +103,13 @@ export class MediaMessage {
             return null
         }
 
-        const viewOnce = this.message?.message?.viewOnceMessage || this.message?.message?.viewOnceMessageV2
+        const viewOnce = MediaMessage.getViewOnceWrapper(this.message?.message)
+        if (!viewOnce?.message) {
+            return null
+        }
 
         for (const key in viewOnce.message) {
-            const data = viewOnce.message[key]
+            const data = (viewOnce.message as any)[key]
             if (data?.viewOnce) {
                 data.viewOnce = false
             }
@@ -131,8 +133,8 @@ export class MediaMessage {
         const media = MediaMessage.getMessageMedia(quoMessage?.contextInfo?.quotedMessage)
         if (!media) return
 
-        const caption = quoMessage.text.trim()
-        const destination = getCaptionAttribute(caption, 'destination')
+        const caption = (quoMessage.text || '').trim()
+        const destination = getCaptionAttribute(caption, 'destination') || ''
 
         const quoted: WhatsappMessageQuoted = { message: caption }
         switch (destination.toLowerCase()) {
@@ -179,11 +181,13 @@ export class MediaMessage {
         }
 
         const baseCaption = this.message?.quoted?.message || viewOnceMedia?.media?.caption
-        const caption = baseCaption?.trim?.()
-        if (!caption?.toLowerCase()?.startsWith('#dvo')) {
+        const caption = baseCaption?.trim?.()?.toLowerCase()
+
+        // accept both spellings: #dvo and #dov
+        if (!caption?.startsWith('#dvo') && !caption?.startsWith('#dov')) {
             return false
         }
 
-        return this.checkPassword(caption)
+        return this.checkPassword(baseCaption.trim())
     }
 }
