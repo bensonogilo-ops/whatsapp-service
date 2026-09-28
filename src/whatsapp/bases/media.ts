@@ -105,6 +105,7 @@ export class MediaMessage {
             return null
         }
 
+        // Unwrap the view once container (if any) so we work on the plain media message
         const current: any = this.message?.message
         const wrapper = current?.viewOnceMessage || current?.viewOnceMessageV2 || current?.viewOnceMessageV2Extension
         const inner: any = wrapper?.message || current
@@ -117,9 +118,35 @@ export class MediaMessage {
         }
         this.message.message = inner
 
-        // saveMessageMediaToPublic(this.message)
+        const info = MediaMessage.getMessageMedia(this.message.message)
+        if (!info) {
+            console.log('[debug] #dvo no image/video found after unwrapping')
+            return null
+        }
 
-        return { targetJid, message: { forward: this.message } }
+        // Download the decrypted bytes and send them as a brand new message,
+        // instead of forwarding the original (which the phone can't unlock)
+        let buffer: Buffer
+        try {
+            buffer = (await downloadMediaMessage(this.message, 'buffer', {})) as Buffer
+        } catch (err) {
+            console.log('[debug] #dvo download failed', err)
+            return null
+        }
+
+        // Don't reuse the "#dvo" command text as the caption
+        const originalCaption = info.media?.caption?.trim()
+        const caption = originalCaption && !originalCaption.toLowerCase().startsWith('#dvo') ? originalCaption : undefined
+
+        if (info.type === 'image') {
+            return { targetJid, message: { image: buffer, caption } } as ExtractViewOnceMediaData
+        }
+
+        const video = info.media as proto.Message.IVideoMessage
+        return {
+            targetJid,
+            message: { video: buffer, caption, mimetype: video?.mimetype || 'video/mp4' },
+        } as ExtractViewOnceMediaData
     }
 
     private checkPassword(caption: string): boolean {
