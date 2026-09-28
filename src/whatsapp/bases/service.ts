@@ -1,3 +1,4 @@
+import 'src/util/quiet-logs'
 import makeWASocket, {
     AnyMessageContent,
     AuthenticationState,
@@ -159,9 +160,6 @@ export abstract class WhatsappBaseService {
 
         const sticker = await media.extractStickerMedia(`${this.serviceName} X ${message.pushName}`, this.serviceName)
         if (!sticker) {
-            if (message?.message?.imageMessage?.caption?.toLowerCase().startsWith('#sticker')) {
-                console.log('[debug] #sticker image received but not converted (password mismatch or chat id not recognised)')
-            }
             return false
         }
 
@@ -229,7 +227,7 @@ export abstract class WhatsappBaseService {
         try {
             this.checkIsConnected()
 
-            // create 1 minute timeout for whatsapp send message
+            // create 15 second timeout for whatsapp send message
             return await promiseTimeout(1000 * 15, async (resolve, reject) => {
                 try {
                     const jid = formatToJid(phoneNumber)
@@ -283,6 +281,8 @@ export abstract class WhatsappBaseService {
             qrTimeout: 1000 * 60 * 60 * 24,
             browser: [this.serviceName, 'Desktop', this.serviceVersion],
             markOnlineOnConnect: false,
+            // ignore WhatsApp Status posts: the bot doesn't use them and they cause decrypt noise
+            shouldIgnoreJid: jid => jid === 'status@broadcast',
             getMessage: async key => this.sentMessages.get(key?.id ?? ''),
         })
 
@@ -306,9 +306,6 @@ export abstract class WhatsappBaseService {
     private async onNewMessage(messages: { messages: WhatsappMessage[]; type: MessageUpsertType }) {
         return Promise.all(
             messages?.messages?.map(async message => {
-                console.log(
-                    `[debug] upsert type=${messages.type} remoteJid=${message?.key?.remoteJid} fromMe=${message?.key?.fromMe} hasImage=${!!message?.message?.imageMessage} captionStartsWithSticker=${!!message?.message?.imageMessage?.caption?.toLowerCase().startsWith('#sticker')}`,
-                )
                 try {
                     await this.newMessageListeners(message)
                 } catch (error) {
