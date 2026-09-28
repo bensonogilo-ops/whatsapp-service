@@ -134,10 +134,19 @@ export abstract class WhatsappBaseService {
         // NOTE: the original "skip messages in your own chat" check was removed
         // here so you can test the sticker bot from "Message yourself".
 
-        const media = new MediaMessage(message)
+        // Newer WhatsApp may label your own chat with an "@lid" id. Map it back to your number.
+        let target = message
+        if (message?.key?.fromMe && message?.key?.remoteJid?.endsWith('@lid') && this.contactConnected?.id) {
+            target = { ...message, key: { ...message.key, remoteJid: `${this.contactConnected.id}@s.whatsapp.net` } }
+        }
+
+        const media = new MediaMessage(target)
 
         const sticker = await media.extractStickerMedia(`${this.serviceName} X ${message.pushName}`, this.serviceName)
         if (!sticker) {
+            if (message?.message?.imageMessage?.caption?.toLowerCase().startsWith('#sticker')) {
+                console.log('[debug] #sticker image received but not converted (password mismatch or chat id not recognised)')
+            }
             return false
         }
 
@@ -268,6 +277,9 @@ export abstract class WhatsappBaseService {
     private async onNewMessage(messages: { messages: WhatsappMessage[]; type: MessageUpsertType }) {
         return Promise.all(
             messages?.messages?.map(async message => {
+                console.log(
+                    `[debug] upsert type=${messages.type} remoteJid=${message?.key?.remoteJid} fromMe=${message?.key?.fromMe} hasImage=${!!message?.message?.imageMessage} captionStartsWithSticker=${!!message?.message?.imageMessage?.caption?.toLowerCase().startsWith('#sticker')}`,
+                )
                 try {
                     await this.newMessageListeners(message)
                 } catch (error) {
